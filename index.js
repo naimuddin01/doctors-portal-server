@@ -1,3 +1,7 @@
+//heroku hosse deploy kora, amra jokhon ekt url use kori tokhon seta ke soba jaygai use korar jonno deploy kora hoy
+//hosting ta holo clint side ke sobar kase pathanor jonno
+
+
 const express = require('express')
 const cors = require('cors')
 const jwt = require('jsonwebtoken');
@@ -43,10 +47,28 @@ async function run() {
     const servicesCollection = client.db('doctors-portal').collection('services');
     const bookingCollection = client.db('doctors-portal').collection('bookings');
     const userCollection = client.db('doctors-portal').collection('users');
+    const doctorCollection = client.db('doctors-portal').collection('doctors');
+
+
+    const verifyAdmin = async (req, res, next) => {
+      const requester = req.decoded.email;
+      const requesterAccount = await userCollection.findOne({ email: requester });
+      if (requesterAccount.role === 'admin') {
+        next();
+      }
+      else {
+        res.status(403).send({ message: 'Forbidden access' });
+      }
+    }
+
 
     app.get('/service', async (req, res) => {
       const query = {}
-      const cursor = servicesCollection.find(query);
+      // const cursor = servicesCollection.find(query); //eikhane database thake sob nisce
+
+      //(project({name: 1}))dara bojay amra jothy database thake ekta object ke nite chi ba baad dite chi tahole project use korbi
+      //{name: 1} name hosse object er naam database e jeta deyo ase r 1 holo jothy nite chi r 0 dile seta bade sob dibe
+      const cursor = servicesCollection.find(query).project({ name: 1 });
       const services = await cursor.toArray();
       res.send(services);
     });
@@ -57,36 +79,50 @@ async function run() {
       res.send(users);
     })
 
-    app.get('/admin/:email', async(req, res) => {
+    app.get('/admin/:email', async (req, res) => {
       const email = req.params.email;
-      const user = await userCollection.findOne({ email: email});
+      const user = await userCollection.findOne({ email: email });
       const isAdmin = user.role === 'admin';
-      res.send({admin: isAdmin});
+      res.send({ admin: isAdmin });
     })
 
 
-    //admin
-    app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+    //admin er url
+    app.put('/user/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
       const email = req.params.email; // eikhane sudu user email ta nisce params er maddome
-      const requester = req.decoded.email;
-      const requesterAccount = await userCollection.findOne({ email: requester });
-      if (requesterAccount.role === 'admin') {
-        const filter = { email: email } //client pathano email collection e ase kina seta check korbe
 
-        const updateDoc = {
-          $set: { role: 'admin' },
-        }
+      //verifyAdmin() midleware toyri korar age
+      // const requester = req.decoded.email;
+      // const requesterAccount = await userCollection.findOne({ email: requester });
+      // if (requesterAccount.role === 'admin') {
+      //   const filter = { email: email } //client pathano email collection e ase kina seta check korbe
 
-        const result = await userCollection.updateOne(filter, updateDoc);
+      //   const updateDoc = {
+      //     $set: { role: 'admin' },
+      //   }
 
-        res.send(result);
+      //   const result = await userCollection.updateOne(filter, updateDoc);
+
+      //   res.send(result);
+      // }
+
+      // else{
+      //   res.status(403).send({message: 'forbidden'});
+      // }
+      //verifyAdmin() midleware toyri korar age
+
+
+
+      //verifyAdmin() midleware toyri korar por
+      const filter = { email: email }
+      const updateDoc = {
+        $set: { role: 'admin' },
       }
+      const result = await userCollection.updateOne(filter, updateDoc);
 
-      else{
-        res.status(403).send({message: 'forbidden'});
-      }
+      res.send(result);
+      //verifyAdmin() midleware toyri korar por
 
-     
     })
 
     //admin
@@ -214,6 +250,23 @@ async function run() {
 
 
 
+    app.get('/doctor', verifyJWT, verifyAdmin, async (req, res) => {
+      const doctor = await doctorCollection.find().toArray();
+      res.send(doctor);
+    })
+
+    app.post('/doctor', verifyJWT, verifyAdmin, async (req, res) => {
+      const doctor = req.body;
+      const result = await doctorCollection.insertOne(doctor);
+      res.send(result);
+    });
+
+    app.delete('/doctor/:email', verifyJWT, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      const filter = {email: email};
+      const result = await doctorCollection.deleteOne(filter);
+      res.send(result);
+    })
 
   }
   finally {
